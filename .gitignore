@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+
+# Working directories: the drops arrive here and the rejects pile up here. Neither belongs in git.
+drops/*
+rejects/*
+!drops/.gitkeep
+!rejects/.gitkeep

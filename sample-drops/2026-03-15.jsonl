@@ -1,0 +1,5 @@
+{"trip_id": "T-0000005", "station_id": "ST-0031", "started_at": "2026-03-15T06:58:00+00:00", "distance_m": 3050}
+{"trip_id": "T-0000006", "station_id": "ST-0007", "started_at": "2026-03-15T07:31:42+00:00", "distance_m": -12}
+{"station_id": "ST-0112", "started_at": "2026-03-15T07:40:00+00:00", "distance_m": 900}
+{"trip_id": "T-0000008", "station_id": "ST-0112", "started_at": "not a timestamp", "distance_m": 1500}
+{"trip_id": "T-0000009", "station_id": "ST-0007", "started_at": "2026-03-15T09:03:19+00:00", "distance_m": 4400}
