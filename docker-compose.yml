@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: meridian
+      POSTGRES_DB: meridian_trips
+    ports:
+      - "55432:5432" 
+    volumes:
+      - dbdata:/var/lib/postgresql/data 
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian -d meridian_trips"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin_container
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: adminpassword
+    ports:
+      - "8080:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin 
+
+volumes:
+  dbdata:         
+  pgadmin_data:   
