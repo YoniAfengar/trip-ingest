@@ -15,7 +15,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TABLE trips(trip_id INTEGER PRIMARY KEY, station_id INTEGER, started_at TIMESTAMPTZ, distance_m integer)")
+    op.execute("CREATE TABLE trips(trip_id TEXT PRIMARY KEY, station_id TEXT, started_at TIMESTAMPTZ, distance_m integer)")
 
 
 def downgrade() -> None:
