@@ -7,6 +7,11 @@ Fill this in as you go. It is checked, and it is where the actual understanding 
 Alembic orders revisions by `down_revision`, not by filename. The filenames are timestamped, so sorting
 them would usually give the same order. Describe a situation on a team of four where it would not.
 
+## Answer Task 4 - why `down_revision` and not the filename
+
+Because If Alembic used the file name, different developers could create migration files at different times. When they merge their work, the file names may not be in the correct order. That is why Alembic uses `down_revision` to know the right order of the migrations.
+
+
 ## Task 7 — the permit that never came back
 
 Your `finally` gives the permit back. Now the machine loses power, or the process is `SIGKILL`ed:

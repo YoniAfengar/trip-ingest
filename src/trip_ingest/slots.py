@@ -7,6 +7,7 @@ from typing import Iterator
 
 @contextmanager
 def job_slot(job_name: str, timeout: float = 30.0) -> Iterator[None]:
+    
     """Hold one of `job_name`'s permits for the duration of the block.
 
     Take a permit if one is free. If none is, wait for one — up to `timeout` seconds, then raise.
