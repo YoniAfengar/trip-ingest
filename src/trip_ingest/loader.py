@@ -10,39 +10,21 @@ def load_trips(conn, trips, batch_size=1000):
 
     with conn.cursor() as cur:
         for batch in batched(trips, batch_size):
-            rows = [
-                (
-                    trip.trip_id,
-                    trip.station_id,
-                    trip.started_at,
-                    trip.distance_m,
-                )
-                for trip in batch
-            ]
-
+            rows = []
+            for trip in batch:
+                row = (trip.trip_id,trip.station_id,trip.started_at,trip.distance_m,)
+                rows.append(row)
             if not rows:
                 continue
 
             placeholders = ",".join(["(%s, %s, %s, %s)"] * len(rows))
-
             values = []
             for row in rows:
                 values.extend(row)
 
             cur.execute(
                 f"""
-                INSERT INTO trips (
-                    trip_id,
-                    station_id,
-                    started_at,
-                    distance_m
-                )
-                VALUES {placeholders}
-                ON CONFLICT (trip_id) DO NOTHING
-                """,
-                values,
-            )
-
+                INSERT INTO trips (trip_id,station_id,started_at,distance_m)
+                VALUES {placeholders}ON CONFLICT (trip_id) DO NOTHING """,values,)
             inserted_count += cur.rowcount
-
     return inserted_count
