@@ -1,30 +1,60 @@
-"""Task 5 — put the trips in the database."""
+"""Load parsed trips into Postgres in batches."""
 from __future__ import annotations
+
 from itertools import batched
 from typing import Iterable
+
 import psycopg
+
 from trip_ingest.model import Trip
 
-def load_trips(conn, trips, batch_size=1000):
+
+def load_trips(
+    conn: psycopg.Connection,
+    trips: Iterable[Trip],
+    batch_size: int = 1000,
+) -> int:
+    """Insert trips in batches and return the number actually inserted."""
     inserted_count = 0
 
     with conn.cursor() as cur:
-        for batch in batched(trips, batch_size): # לוקח את כל הטיולים ומחלק אותם למנות בגודל של batch_size
-            rows = []
-            for trip in batch:
-                row = (trip.trip_id,trip.station_id,trip.started_at,trip.distance_m,) #מגדיר טאפל (ליסט שלא משתנה ) עם כל הערכים של טריפ (הפסיק בסוף זה מה שמגדיר את הטאפל )
-                rows.append(row) #מכניס את כל הערכים של כל טריפ למערך אחד
-            if not rows:
-                continue # אם אין יותר רשומות בבאטצ׳ הוא עובר לבאטצ׳ הבא 
+        for batch in batched(trips, batch_size):
+            rows = [
+                (
+                    trip.trip_id,
+                    trip.station_id,
+                    trip.started_at,
+                    trip.distance_m,
+                )
+                for trip in batch
+            ]
 
-            placeholders = ",".join(["(%s, %s, %s, %s)"] * len(rows)) # מייצר מערך לפי כמות השורות שיש לי כאשר כל מערך מוגדר מ4 שדות כמו שהגדרנו בטבלה 
-            values = []
+            if not rows:
+                continue
+
+            placeholders = ",".join(
+                ["(%s, %s, %s, %s)"] * len(rows)
+            )
+
+            values: list[object] = []
+
             for row in rows:
-                values.extend(row)# מכניס את כל הערכים של כל טריפ למערך אחד
+                values.extend(row)
 
             cur.execute(
                 f"""
-                INSERT INTO trips (trip_id,station_id,started_at,distance_m)
-                VALUES {placeholders}ON CONFLICT (trip_id) DO NOTHING """,values,) # מכניס את כל הערכים של כל טריפ לטבלה לפי המערך שהגדרנו למעלה 
-            inserted_count += cur.rowcount # כל ריצה הוא מוסיף את כמות הרשומות שנכנסו לדאטה בייס לקאונטר למעלה 
+                INSERT INTO trips (
+                    trip_id,
+                    station_id,
+                    started_at,
+                    distance_m
+                )
+                VALUES {placeholders}
+                ON CONFLICT (trip_id) DO NOTHING
+                """,
+                values,
+            )
+
+            inserted_count += cur.rowcount
+
     return inserted_count

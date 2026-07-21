@@ -1,72 +1,105 @@
-"""Task 6 — wire it together. Task 7 — and then make sure only two of these run at once."""
+"""Task 6 — wire it together. Task 7 — allow only two ingests at once."""
 from __future__ import annotations
-from importlib.resources import path
+
 import json
-from logging import exception
 import logging
 from pathlib import Path
+
 import psycopg
+
 from trip_ingest.loader import load_trips
-from trip_ingest.model import Report
+from trip_ingest.model import Report, Trip
 from trip_ingest.reader import parse_row
 from trip_ingest.settings import database_url
+from trip_ingest.slots import job_slot
 
-def ingest_drop(conn: psycopg.Connection, path: Path, rejects_dir: Path) -> Report:
-    """Read one drop, load the good rows, write the bad ones aside, and report what happened.
 
-    A rejected row must not stop the job, and it must not vanish either: write it to
-    `rejects_dir/<drop-name>.rejects.jsonl`, one JSON object per line, each carrying the original row
-    and why it was rejected. Somebody will have to fix these in the morning.
-    """
-    trips = []
+def _write_reject(
+    reject_path: Path,
+    line: str,
+    error: Exception,
+) -> None:
+    rejected_row = {"row": line, "error": str(error)}
+    with reject_path.open("a") as reject_file:
+        reject_file.write(json.dumps(rejected_row) + "\n")
+
+
+def _read_drop(
+    path: Path,
+    rejects_dir: Path,
+) -> tuple[list[Trip], int, int]:
+    trips: list[Trip] = []
     read = 0
     rejected = 0
+    rejects_dir.mkdir(parents=True, exist_ok=True)
+    reject_path = rejects_dir / f"{path.name}.rejects.jsonl"
 
-    with path.open("r") as f: # פותח את הקובץ לקריאה
-        for line in f: # קורא כל שורה בקובץ
-            read += 1 # כל שורה שקוראים, מגדילים את המונה
-            try: # מנסה לקרוא את השורה, אם יש שגיאה הוא עובר לאקספט
-                raw = json.loads(line) # הופך את השורה למילון
-                trip = parse_row(raw) # הופך את המילון לאובייקט טריפ
-                trips.append(trip) # מוסיף את האובייקט לרשימת הטריפים
-            except Exception as e: # exception אומרת כל שגיאה אפשרית ( יש הרבה שגיאות בתוכה )
+    with path.open("r") as file:
+        for line in file:
+            read += 1
+            try:
+                trips.append(parse_row(json.loads(line)))
+            except Exception as error:
                 rejected += 1
-                reject_path = rejects_dir / f"{path.name}.rejects.jsonl" # יוצר את הנתיב לקובץ הדחיות
-                with reject_path.open("a") as reject_file: # פותח את הקובץ במצב של הוספה
-                    reject_file.write(json.dumps({"row": line, "error": str(e)}) + "\n") # כותב את השורה הדחויה ואת השגיאה לקובץ הדחיות
-                                                # row זה רק משתנה שלוקח את השורה המקורית   # error זה משתנה שמכיל בתוכו את המשתנה e שמכיל את השגיאה
-    loaded = load_trips(conn, trips) # טוען את כל הטריפים שהצלחנו לקרוא למסד הנתונים 
-    return Report(read=read,
-                  rejected=rejected,
-                  loaded=loaded
-                  ) # מייצר דוח עם כל המידע על מה שקראנו, מה נדחה ומה נטען למסד הנתונים
+                _write_reject(reject_path, line, error)
 
-def run_job(drop_dir: Path, rejects_dir: Path = Path("rejects")) -> Report:
-    """Ingest every `*.jsonl` in `drop_dir` and return the totals across all of them.
+    return trips, read, rejected
 
-    Task 6. Log a structured summary — one line, at INFO, naming the counts — so that a person on
-    call at 3am can tell what happened without opening the database.
 
-    Task 7. Two of these may run at once. A third must wait.
-    """
-    with psycopg.connect(database_url()) as conn: # פותח חיבור למסד הנתונים
-        total_drops = 0 # מונה של כל הקבצים שקראנו
-        total_read = 0 # מונה של כל השורות שקראנו
-        total_rejected = 0 # מונה של כל השורות שנדחו
-        total_loaded = 0 # מונה של כל השורות שהצליחו להיטען למסד הנתונים
-        for drop_path in drop_dir.glob("*.jsonl"): # מחפש את כל הקבצים עם סיומת jsonl בתיקייה
-            total_drops += 1
-            report = ingest_drop(conn, drop_path, rejects_dir) # קורא את הקובץ ומחזיר דוח על מה שקראנו
-            total_read += report.read # מוסיף את המונה של השורות שקראנו למונה הכללי
-            total_rejected += report.rejected # מוסיף את המונה של השורות שנדחו למונה הכללי
-            total_loaded += report.loaded # מוסיף את המונה של השורות שהצליחו להיטען למסד הנתונים למונה הכללי
+def ingest_drop(
+    conn: psycopg.Connection,
+    path: Path,
+    rejects_dir: Path,
+) -> Report:
+    """Read one drop, load good rows and write rejected rows aside."""
+    trips, read, rejected = _read_drop(path, rejects_dir)
+    loaded = load_trips(conn, trips)
+    return Report(read=read, loaded=loaded, rejected=rejected)
 
-    logging.info(
-        "Ingest complete: drops=%d read=%d loaded=%d rejected=%d",
-        total_drops,total_read,total_loaded,total_rejected,
-            ) # מדפיס לוג עם כל המידע על מה שקראנו, מה נדחה ומה נטען למסד הנתונים   
 
-    return Report(read=total_read,
-                  rejected=total_rejected,
-                  loaded=total_loaded
+def _ingest_drops(
+    conn: psycopg.Connection,
+    drop_dir: Path,
+    rejects_dir: Path,
+) -> tuple[int, Report]:
+    total_drops = 0
+    total_read = 0
+    total_loaded = 0
+    total_rejected = 0
+
+    for drop_path in drop_dir.glob("*.jsonl"):
+        total_drops += 1
+        report = ingest_drop(conn, drop_path, rejects_dir)
+        total_read += report.read
+        total_loaded += report.loaded
+        total_rejected += report.rejected
+
+    report = Report(
+        read=total_read,
+        loaded=total_loaded,
+        rejected=total_rejected,
     )
+    return total_drops, report
+
+
+def run_job(
+    drop_dir: Path,
+    rejects_dir: Path = Path("rejects"),
+) -> Report:
+    """Ingest every JSONL drop and return the combined report."""
+    with job_slot("ingest"):
+        with psycopg.connect(database_url()) as conn:
+            total_drops, report = _ingest_drops(
+                conn,
+                drop_dir,
+                rejects_dir,
+            )
+
+        logging.info(
+            "Ingest complete: drops=%d read=%d loaded=%d rejected=%d",
+            total_drops,
+            report.read,
+            report.loaded,
+            report.rejected,
+        )
+        return report
