@@ -9,51 +9,51 @@
 ![Pytest](https://img.shields.io/badge/Pytest-33%20Passed-success)
 ![MyPy](https://img.shields.io/badge/MyPy-Strict-success)
 
----
+## Overview
 
-# Overview
-
-Trip Ingest is a production-inspired batch ingestion pipeline built in Python.
+Trip Ingest is a batch ingestion pipeline built in Python.
 
 The application processes trip events stored as JSONL files, validates every record, inserts valid rows into PostgreSQL in configurable batches, and writes invalid rows into dedicated reject files without interrupting the ingestion process.
 
-The project was built to demonstrate engineering practices commonly found in modern data platforms, including streaming ingestion, idempotent loading, database migrations, automated testing, strict type checking, and containerized execution.
+The project demonstrates practical data-engineering patterns, including incremental file processing, idempotent database loading, schema migrations, concurrency control, automated testing, strict type checking, and containerized execution.
 
----
+## Contents
 
-# Architecture
+- [Architecture](#architecture)
+- [Data Flow](#data-flow)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Testing](#testing)
+- [Static Type Checking](#static-type-checking)
+- [Engineering Decisions](#engineering-decisions)
+- [Future Improvements](#future-improvements)
+- [Author](#author)
+
+## Architecture
 
 ```mermaid
 flowchart LR
-
-A[JSONL Drop Files]
---> B[Read File]
-
-B --> C[Parse & Validate]
-
-C -->|Valid| D[Batch Loader]
-
-D --> E[(PostgreSQL)]
-
-C -->|Invalid| F[Reject Files]
-
-E --> G[Structured Logging]
-
-E --> H[Database Semaphore]
+    A[JSONL Drop Files] --> B[Reader]
+    B --> C[Parse and Validate]
+    C -->|Valid| D[Batch Loader]
+    D --> E[(PostgreSQL)]
+    C -->|Invalid| F[Reject Files]
+    E --> G[Structured Summary Log]
+    H[Database-backed Semaphore] --> D
 ```
 
----
-
-# Data Flow
+## Data Flow
 
 ```text
-JSONL Files
+JSONL files
      │
      ▼
-Read line by line
+Read each record
      │
      ▼
-Parse & Validate
+Parse and validate
      │
  ┌───┴────────┐
  │            │
@@ -61,57 +61,54 @@ Parse & Validate
 Valid      Invalid
  │            │
  ▼            ▼
-Batch      Reject File
-Insert
+Batch      Reject file
+insert
  │
  ▼
 PostgreSQL
 ```
 
----
+## Features
 
-# Features
-
-- Streaming JSONL ingestion
+- JSONL file ingestion
+- Record parsing and validation
 - Configurable batch inserts
 - PostgreSQL persistence
-- Idempotent loading using `ON CONFLICT DO NOTHING`
-- Reject file generation for invalid records
-- Structured logging
+- Idempotent loading with `ON CONFLICT DO NOTHING`
+- Reject-file generation for invalid records
 - Alembic database migrations
 - Database-backed concurrency control
+- Structured job-summary logging
 - Dockerized execution
 - Automated testing with Pytest
 - Strict static type checking with MyPy
 
----
-
-# Tech Stack
+## Tech Stack
 
 | Category | Technology |
-|----------|------------|
+|---|---|
 | Language | Python 3.11+ |
 | Database | PostgreSQL 16 |
+| Database Driver | Psycopg 3 |
 | Migrations | Alembic |
-| Containerization | Docker & Docker Compose |
+| Containers | Docker and Docker Compose |
 | Testing | Pytest |
 | Static Analysis | MyPy |
 | Dependency Management | uv |
 
----
-
-# Project Structure
+## Project Structure
 
 ```text
 trip-ingest/
-│
 ├── alembic/
 ├── assets/
+│   └── screenshots/
 ├── drops/
 ├── rejects/
 ├── sample-drops/
 ├── src/
 │   └── trip_ingest/
+│       ├── __main__.py
 │       ├── errors.py
 │       ├── ingest.py
 │       ├── loader.py
@@ -120,7 +117,6 @@ trip-ingest/
 │       ├── reader.py
 │       ├── settings.py
 │       └── slots.py
-│
 ├── tests/
 ├── Dockerfile
 ├── docker-compose.yml
@@ -128,127 +124,163 @@ trip-ingest/
 └── README.md
 ```
 
----
+## Getting Started
 
-# Quick Start
+### Prerequisites
 
-Clone the repository
+Install:
+
+- Docker Desktop
+- Git
+
+### Clone the repository
 
 ```bash
 git clone https://github.com/YoniAfengar/trip-ingest.git
-
 cd trip-ingest
 ```
 
-Start the required services
+### Start the services
 
 ```bash
 docker compose up -d
 ```
 
-Run the ingestion pipeline
+This starts:
+
+- PostgreSQL
+- pgAdmin
+
+### Add input files
+
+Place one or more `.jsonl` files inside:
+
+```text
+drops/
+```
+
+Example files are available in:
+
+```text
+sample-drops/
+```
+
+To copy them:
+
+```bash
+cp sample-drops/*.jsonl drops/
+```
+
+### Run the ingestion pipeline
 
 ```bash
 docker compose run --rm ingest
 ```
 
-The application automatically:
+The container:
 
-- waits for PostgreSQL to become healthy
-- applies database migrations
-- processes all JSONL files
-- writes invalid rows into reject files
-- completes the ingestion job
+1. waits for PostgreSQL to become healthy
+2. applies Alembic migrations
+3. processes every `.jsonl` file in `/data/drops`
+4. loads valid rows into PostgreSQL
+5. writes invalid rows to `/data/rejects`
 
----
+### Stop the services
 
-# Running Tests
+```bash
+docker compose down
+```
+
+To also remove the database volumes:
+
+```bash
+docker compose down -v
+```
+
+## Testing
+
+Install the development dependencies through `uv`, then run:
 
 ```bash
 uv run pytest
 ```
 
-Current status
+Current result:
 
 ```text
-33 passed
-3 deselected
+33 passed, 3 deselected
 ```
 
----
+The three deselected tests are excluded by the default Pytest configuration.
 
-# Static Type Checking
+## Static Type Checking
 
 ```bash
 uv run mypy src
 ```
 
-Current status
+Current result:
 
 ```text
 Success: no issues found in 10 source files
 ```
 
----
+## Engineering Decisions
 
-# Engineering Decisions
+### Incremental Processing
 
-## Streaming Processing
+Input files are read one record at a time rather than loaded entirely into memory. This keeps memory usage predictable when processing larger files.
 
-Input files are processed incrementally instead of loading the entire dataset into memory, allowing the pipeline to scale to larger files.
+### Batch Loading
 
----
+Valid trips are grouped into configurable batches before insertion. This reduces database round trips while preserving bounded memory usage.
 
-## Batch Loading
+### Idempotency
 
-Trips are inserted into PostgreSQL in configurable batches to reduce database round trips and improve throughput.
+The loader uses:
 
----
+```sql
+ON CONFLICT (trip_id) DO NOTHING
+```
 
-## Idempotency
+This allows the same input to be processed again without creating duplicate trips.
 
-The loader uses PostgreSQL's `ON CONFLICT DO NOTHING`, making repeated executions safe without creating duplicate records.
+### Reject Isolation
 
----
+Invalid rows do not stop the job. Each rejected row is written to a separate JSONL file together with the validation error.
 
-## Reject Isolation
+### Database Migrations
 
-Invalid records never interrupt the ingestion process.
+The application applies Alembic migrations before starting ingestion, ensuring that the required database schema exists before data is loaded.
 
-Each rejected row is written to a dedicated reject file together with the corresponding validation error.
+### Concurrency Control
 
----
+A PostgreSQL-backed semaphore limits ingestion concurrency to two active jobs. Permits are acquired for the duration of the job and released when execution finishes.
 
-## Database-backed Concurrency Control
+### Automated Quality Checks
 
-A PostgreSQL-backed semaphore limits the number of concurrent ingestion jobs, preventing multiple workers from exceeding the configured capacity.
+The project includes:
 
----
+- unit tests
+- migration tests
+- loader tests
+- parsing tests
+- concurrency tests
+- source-size checks
+- strict MyPy validation
 
-# Quality
+## Future Improvements
 
-- ✅ 33 automated tests
-- ✅ MyPy strict type checking
-- ✅ Dockerized environment
-- ✅ Alembic database migrations
-- ✅ Modular project structure
-
----
-
-# Future Improvements
-
-- CI/CD with GitHub Actions
+- GitHub Actions CI/CD
+- Apache Airflow orchestration
+- S3-compatible object-storage support
 - Prometheus metrics
-- Retry policy for transient database failures
-- Object storage support (S3-compatible)
-- Workflow orchestration with Apache Airflow
+- Retry handling for transient database failures
 
----
-
-# Author
+## Author
 
 **Yonatan Afengar**
 
-Senior BI Developer transitioning into Data Engineering.
+Senior BI Developer expanding into modern Data Engineering.
 
-Passionate about building reliable data systems with Python, SQL, PostgreSQL, Docker, and modern engineering practices.
+Focused on Python, SQL, PostgreSQL, Docker, data pipelines, and reliable backend data systems.
