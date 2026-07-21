@@ -9,3 +9,4 @@ drops/*
 rejects/*
 !drops/.gitkeep
 !rejects/.gitkeep
+.DS_Store
