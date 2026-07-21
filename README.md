@@ -1,221 +1,254 @@
-# 🚆 Trip Ingest Pipeline
+# 🚴 Trip Ingest
 
-![Trip Ingest Pipeline](screenshots/trip-ingest.png)
+> A production-inspired data ingestion pipeline that validates JSONL trip data, loads valid records into PostgreSQL in batches, isolates invalid rows into reject files, and guarantees idempotent ingestion.
 
-> **Production-ready ETL pipeline for validating, processing, and loading large JSONL datasets into PostgreSQL using Python, Docker, Alembic, and automated testing.**
-
-![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=for-the-badge&logo=postgresql&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Alembic](https://img.shields.io/badge/Alembic-Database%20Migrations-orange?style=for-the-badge)
-![Pytest](https://img.shields.io/badge/Pytest-Tested-success?style=for-the-badge)
-![MyPy](https://img.shields.io/badge/MyPy-Type%20Checked-blue?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Alembic](https://img.shields.io/badge/Alembic-Migrations-orange)
+![Pytest](https://img.shields.io/badge/Pytest-33%20Passed-success)
+![MyPy](https://img.shields.io/badge/MyPy-Strict-success)
 
 ---
 
-# ✨ Highlights
+# Overview
 
-- 🚀 Stream-based ingestion for large JSONL datasets
-- 📦 Batch ETL processing with configurable batch size
-- 🔒 Idempotent database loading using PostgreSQL constraints
-- ❌ Automatic reject handling for invalid records
-- 🐳 Fully Dockerized development environment
-- 🗄️ Alembic database migrations
-- ✅ Automated testing with Pytest
-- 🔍 Static type checking with MyPy
-- 🏗️ Production-style project architecture
+Trip Ingest is a production-inspired batch ingestion pipeline built in Python.
+
+The application processes trip events stored as JSONL files, validates every record, inserts valid rows into PostgreSQL in configurable batches, and writes invalid rows into dedicated reject files without interrupting the ingestion process.
+
+The project was built to demonstrate engineering practices commonly found in modern data platforms, including streaming ingestion, idempotent loading, database migrations, automated testing, strict type checking, and containerized execution.
 
 ---
 
-# 📖 Overview
+# Architecture
 
-Trip Ingest Pipeline is a production-style ETL project that demonstrates how to ingest large JSONL datasets into PostgreSQL using modern Python engineering practices.
+```mermaid
+flowchart LR
 
-The pipeline validates incoming records, separates invalid data into reject files, performs efficient batch inserts, guarantees idempotent loading, and produces execution summaries.
+A[JSONL Drop Files]
+--> B[Read File]
 
-The project emphasizes clean architecture, automated testing, reproducible environments, and maintainable code rather than simply loading data into a database.
+B --> C[Parse & Validate]
 
----
+C -->|Valid| D[Batch Loader]
 
-# 🏗️ Architecture
+D --> E[(PostgreSQL)]
 
-```text
-             JSONL Drop Files
-                    │
-                    ▼
-           JSON Validation
-                    │
-        ┌───────────┴───────────┐
-        │                       │
-        ▼                       ▼
-   Valid Records         Invalid Records
-        │                       │
-        ▼                       ▼
- Batch Processing        Reject File (.jsonl)
-        │
-        ▼
- PostgreSQL Database
-        │
-        ▼
- Execution Summary
+C -->|Invalid| F[Reject Files]
+
+E --> G[Structured Logging]
+
+E --> H[Database Semaphore]
 ```
 
 ---
 
-# 🛠️ Technology Stack
+# Data Flow
 
-| Category | Technologies |
-|-----------|--------------|
-| Language | Python 3.12 |
-| Database | PostgreSQL |
-| Containerization | Docker & Docker Compose |
-| Database Migrations | Alembic |
-| Testing | Pytest |
-| Type Checking | MyPy |
-| Version Control | Git |
+```text
+JSONL Files
+     │
+     ▼
+Read line by line
+     │
+     ▼
+Parse & Validate
+     │
+ ┌───┴────────┐
+ │            │
+ ▼            ▼
+Valid      Invalid
+ │            │
+ ▼            ▼
+Batch      Reject File
+Insert
+ │
+ ▼
+PostgreSQL
+```
 
 ---
 
-# 📂 Project Structure
+# Features
+
+- Streaming JSONL ingestion
+- Configurable batch inserts
+- PostgreSQL persistence
+- Idempotent loading using `ON CONFLICT DO NOTHING`
+- Reject file generation for invalid records
+- Structured logging
+- Alembic database migrations
+- Database-backed concurrency control
+- Dockerized execution
+- Automated testing with Pytest
+- Strict static type checking with MyPy
+
+---
+
+# Tech Stack
+
+| Category | Technology |
+|----------|------------|
+| Language | Python 3.11+ |
+| Database | PostgreSQL 16 |
+| Migrations | Alembic |
+| Containerization | Docker & Docker Compose |
+| Testing | Pytest |
+| Static Analysis | MyPy |
+| Dependency Management | uv |
+
+---
+
+# Project Structure
 
 ```text
 trip-ingest/
+│
+├── alembic/
+├── assets/
+├── drops/
+├── rejects/
+├── sample-drops/
 ├── src/
 │   └── trip_ingest/
+│       ├── errors.py
+│       ├── ingest.py
+│       ├── loader.py
+│       ├── migrate.py
+│       ├── model.py
+│       ├── reader.py
+│       ├── settings.py
+│       └── slots.py
+│
 ├── tests/
-├── migrations/
-├── sample_data/
-├── rejects/
-├── screenshots/
-├── docker-compose.yml
 ├── Dockerfile
+├── docker-compose.yml
 ├── pyproject.toml
 └── README.md
 ```
 
 ---
 
-# 🚀 Key Features
+# Quick Start
 
-## Streaming Ingestion
-
-Processes input efficiently without loading the entire dataset into memory.
-
----
-
-## Data Validation
-
-Each record is validated before reaching the database.
-
-Invalid records are written into reject files without stopping the pipeline.
-
----
-
-## Batch Loading
-
-Valid records are inserted in configurable batches for improved performance.
-
----
-
-## Idempotent Processing
-
-Duplicate executions never insert the same record twice.
-
----
-
-## Production-Oriented Design
-
-- Dockerized environment
-- Database migrations
-- Automated tests
-- Static type checking
-- Clean project structure
-
----
-
-# ⚙️ Quick Start
-
-Clone the repository:
+Clone the repository
 
 ```bash
-git clone git@github.com:YoniAfengar/trip-ingest.git
+git clone https://github.com/YoniAfengar/trip-ingest.git
+
 cd trip-ingest
 ```
 
-Start PostgreSQL:
+Start the required services
 
 ```bash
 docker compose up -d
 ```
 
-Apply migrations:
+Run the ingestion pipeline
 
 ```bash
-uv run alembic upgrade head
+docker compose run --rm ingest
 ```
 
-Run the pipeline:
+The application automatically:
 
-```bash
-uv run trip-ingest
-```
+- waits for PostgreSQL to become healthy
+- applies database migrations
+- processes all JSONL files
+- writes invalid rows into reject files
+- completes the ingestion job
 
 ---
 
-# 🧪 Running Tests
-
-Run the complete test suite:
+# Running Tests
 
 ```bash
 uv run pytest
 ```
 
-Run end-to-end tests:
+Current status
 
-```bash
-uv run pytest -m e2e
+```text
+33 passed
+3 deselected
 ```
 
-Run type checking:
+---
+
+# Static Type Checking
 
 ```bash
 uv run mypy src
 ```
 
----
+Current status
 
-# 📈 Engineering Principles
-
-This project focuses on applying software engineering best practices to ETL development.
-
-Key principles include:
-
-- Clean Architecture
-- Separation of Concerns
-- Reproducible Environments
-- Automated Testing
-- Type Safety
-- Database Migrations
-- Maintainable Code
-- Production-style Development Workflow
+```text
+Success: no issues found in 10 source files
+```
 
 ---
 
-# 🚀 Future Improvements
+# Engineering Decisions
 
-- Apache Airflow orchestration
-- Cloud deployment
-- Monitoring & logging
-- CI/CD pipeline
-- Performance benchmarking
+## Streaming Processing
+
+Input files are processed incrementally instead of loading the entire dataset into memory, allowing the pipeline to scale to larger files.
 
 ---
 
-# 👨‍💻 Author
+## Batch Loading
+
+Trips are inserted into PostgreSQL in configurable batches to reduce database round trips and improve throughput.
+
+---
+
+## Idempotency
+
+The loader uses PostgreSQL's `ON CONFLICT DO NOTHING`, making repeated executions safe without creating duplicate records.
+
+---
+
+## Reject Isolation
+
+Invalid records never interrupt the ingestion process.
+
+Each rejected row is written to a dedicated reject file together with the corresponding validation error.
+
+---
+
+## Database-backed Concurrency Control
+
+A PostgreSQL-backed semaphore limits the number of concurrent ingestion jobs, preventing multiple workers from exceeding the configured capacity.
+
+---
+
+# Quality
+
+- ✅ 33 automated tests
+- ✅ MyPy strict type checking
+- ✅ Dockerized environment
+- ✅ Alembic database migrations
+- ✅ Modular project structure
+
+---
+
+# Future Improvements
+
+- CI/CD with GitHub Actions
+- Prometheus metrics
+- Retry policy for transient database failures
+- Object storage support (S3-compatible)
+- Workflow orchestration with Apache Airflow
+
+---
+
+# Author
 
 **Yonatan Afengar**
 
-Senior BI Developer transitioning into modern Data Engineering through production-ready Python projects.
+Senior BI Developer transitioning into Data Engineering.
 
-- 💼 LinkedIn: https://www.linkedin.com/in/yonatan-afengar-92bb18155/
-- 💻 GitHub: https://github.com/YoniAfengar
+Passionate about building reliable data systems with Python, SQL, PostgreSQL, Docker, and modern engineering practices.
